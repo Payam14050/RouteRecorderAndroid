@@ -93,7 +93,7 @@ class RouteHomeActivity: AppCompatActivity() {
   val trips=store.trips();if(trips.isEmpty()) { Toast.makeText(this,"هنوز سفری ثبت نشده است",Toast.LENGTH_SHORT).show();return }
   val labels=trips.map { SimpleDateFormat("yyyy/MM/dd  HH:mm",Locale.getDefault()).format(Date(it.startedAt))+"  •  "+String.format("%.2f km",it.distance/1000) }.toTypedArray()
   androidx.appcompat.app.AlertDialog.Builder(this).setTitle("سفرهای ذخیره‌شده").setItems(labels) { _,i ->
-   val points=store.points(trips[i].id);line.points=points.map { GeoPoint(it.lat,it.lon) };if(points.isNotEmpty()) map.controller.setCenter(GeoPoint(points.last().lat,points.last().lon));map.invalidate()
+   val points=store.points(trips[i].id);line.points.clear();line.points.addAll(points.map { GeoPoint(it.lat,it.lon) });if(points.isNotEmpty()) map.controller.setCenter(GeoPoint(points.last().lat,points.last().lon));map.invalidate()
   }.setPositiveButton("بستن",null).show()
  }
  override fun onResume() { super.onResume();map.onResume();if(!receiverRegistered) { val f=IntentFilter(RouteRecordingService.ACTION_LOCATION);if(Build.VERSION.SDK_INT>=33) registerReceiver(receiver,f,RECEIVER_NOT_EXPORTED) else @Suppress("DEPRECATION") registerReceiver(receiver,f);receiverRegistered=true } }
