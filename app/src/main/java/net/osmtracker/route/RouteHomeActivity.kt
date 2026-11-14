@@ -87,7 +87,7 @@ class RouteHomeActivity: AppCompatActivity() {
  }
  private fun restoreLastRoute() {
   val trip=store.trips().firstOrNull()?:return
-  if(trip.endedAt>0) { val points=store.points(trip.id);line.points=points.map { GeoPoint(it.lat,it.lon) };distanceValue.text=String.format(Locale.getDefault(),"%.2f km",trip.distance/1000);if(points.isNotEmpty()) map.controller.setCenter(GeoPoint(points.last().lat,points.last().lon)) }
+  if(trip.endedAt>0) { val points=store.points(trip.id);line.points.clear(); line.points.addAll(points.map { GeoPoint(it.lat,it.lon) });distanceValue.text=String.format(Locale.getDefault(),"%.2f km",trip.distance/1000);if(points.isNotEmpty()) map.controller.setCenter(GeoPoint(points.last().lat,points.last().lon)) }
  }
  private fun showHistory() {
   val trips=store.trips();if(trips.isEmpty()) { Toast.makeText(this,"هنوز سفری ثبت نشده است",Toast.LENGTH_SHORT).show();return }
