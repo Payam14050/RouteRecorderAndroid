@@ -1,27 +1,30 @@
-name: Import upstream and build APK
+name: Build Route Recorder APK
 
 on:
   workflow_dispatch:
   push:
     branches: [main]
     paths:
+      - 'app/**'
+      - 'gradle/**'
+      - 'gradle.properties'
+      - 'build.gradle'
+      - 'settings.gradle'
       - '.github/workflows/import-and-build.yml'
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: upstream-import-and-build
+  group: route-recorder-build
   cancel-in-progress: false
 
 jobs:
-  import-and-build:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out this repository
+      - name: Check out source
         uses: actions/checkout@v4
-        with:
-          persist-credentials: true
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -29,34 +32,17 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Import the pinned OSMTracker release
-        shell: bash
-        run: |
-          set -euo pipefail
-          git clone --depth 1 --branch v2026.02 https://github.com/labexp/osmtracker-android.git /tmp/osmtracker-upstream
-          cp /tmp/osmtracker-upstream/README.md UPSTREAM_README.md
-          rsync -a --exclude='.git' --exclude='.github' --exclude='README.md' /tmp/osmtracker-upstream/ ./
-          chmod +x ./gradlew
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          if ! git diff --cached --quiet; then
-            git commit -m "Import OSMTracker Android v2026.02 source"
-            git push origin HEAD:main
-          fi
-
       - name: Configure bounded Gradle memory
         shell: bash
         run: |
           set -euo pipefail
           touch gradle.properties
-          grep -vE '^(org\.gradle\.jvmargs|org\.gradle\.workers\.max)=' gradle.properties > /tmp/gradle.properties
+          grep -vE '^(org\\.gradle\\.jvmargs|org\\.gradle\\.workers\\.max)=' gradle.properties > /tmp/gradle.properties || true
           mv /tmp/gradle.properties gradle.properties
           cat >> gradle.properties <<'EOF'
           org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8
           org.gradle.workers.max=2
           EOF
-          echo "Applied Gradle heap and worker limits after upstream import."
 
       - name: Build debug APK
         run: ./gradlew assembleDebug --no-daemon --max-workers=2
@@ -64,7 +50,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: RouteRecorderAndroid-debug-apk
+          name: RouteRecorder-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
