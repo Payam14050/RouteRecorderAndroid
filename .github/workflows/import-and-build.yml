@@ -37,7 +37,7 @@ jobs:
         run: |
           set -euo pipefail
           touch gradle.properties
-          grep -vE '^(org\\.gradle\\.jvmargs|org\\.gradle\\.workers\\.max)=' gradle.properties > /tmp/gradle.properties || true
+          grep -vE '^(org[.]gradle[.]jvmargs|org[.]gradle[.]workers[.]max)=' gradle.properties > /tmp/gradle.properties || true
           mv /tmp/gradle.properties gradle.properties
           cat >> gradle.properties <<'EOF'
           org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8
