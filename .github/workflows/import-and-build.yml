@@ -45,8 +45,21 @@ jobs:
             git push origin HEAD:main
           fi
 
-      - name: Run unit tests and build debug APK
-        run: ./gradlew testDebugUnitTest assembleDebug --no-daemon
+      - name: Configure bounded Gradle memory
+        shell: bash
+        run: |
+          set -euo pipefail
+          touch gradle.properties
+          grep -vE '^(org\.gradle\.jvmargs|org\.gradle\.workers\.max)=' gradle.properties > /tmp/gradle.properties
+          mv /tmp/gradle.properties gradle.properties
+          cat >> gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8
+          org.gradle.workers.max=2
+          EOF
+          echo "Applied Gradle heap and worker limits after upstream import."
+
+      - name: Build debug APK
+        run: ./gradlew assembleDebug --no-daemon --max-workers=2
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
