@@ -1,9 +1,9 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <resources>
   <!--Generic strings-->
-  <string name="app_name">OSMTracker for Android™</string>
-  <string name="app_short_name">OSMTracker</string>
-  <string name="app_description">Inspired by OSMTracker on Windows Mobile, it allows you to track your journeys, mark significant way points (Voice recording, photos), export them in GPX format for later use with Open Street Map tools like JOSM.</string>
+  <string name="app_name">Route Recorder</string>
+  <string name="app_short_name">Route Recorder</string>
+  <string name="app_description">GPS route recorder with live map, trip history and GPX export.</string>
   <!--TrackLogger-->
   <string name="tracklogger">Track logger</string>
   <string name="tracklogger_waiting_gps">Waiting for GPS fix to enable buttons…</string>
