@@ -24,7 +24,7 @@ class RouteRecordingService: Service(),LocationListener {
    try {
     val fine=checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED
     val coarse=checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION)==PackageManager.PERMISSION_GRANTED
-    if(fine||coarse) { manager.requestLocationUpdates(LocationManager.GPS_PROVIDER,1000L,1f,this); manager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER,3000L,5f,this) } else stopRecording()
+    if(fine||coarse) { try { manager.requestLocationUpdates(LocationManager.GPS_PROVIDER,1000L,1f,this) } catch(_: Exception) {}; try { manager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER,3000L,5f,this) } catch(_: Exception) {} } else stopRecording()
    } catch(_: SecurityException) { stopRecording() }
   }
   return START_STICKY
