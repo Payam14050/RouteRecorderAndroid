@@ -20,16 +20,22 @@ import kotlin.math.min
  * The caller owns and releases the background bitmap.
  */
 object RouteVideoExporter {
+    @Volatile private var paused = false
+    fun setPaused(value: Boolean) { paused = value }
+    fun isPaused(): Boolean = paused
+
     fun export(
         background: Bitmap,
         points: List<PointF>,
         output: File,
         routeColor: Int,
+        durationSeconds: Int,
         onComplete: (String?) -> Unit
     ) {
+        paused = false
         Thread {
             val error = try {
-                encode(background, points, output, routeColor)
+                encode(background, points, output, routeColor, durationSeconds)
                 null
             } catch (e: Exception) {
                 e.localizedMessage ?: "خطای ناشناخته در ساخت ویدئو"
@@ -38,7 +44,7 @@ object RouteVideoExporter {
         }.start()
     }
 
-    private fun encode(background: Bitmap, points: List<PointF>, output: File, routeColor: Int) {
+    private fun encode(background: Bitmap, points: List<PointF>, output: File, routeColor: Int, durationSeconds: Int) {
         require(points.size >= 2) { "مسیر برای ساخت ویدئو کافی نیست" }
         val scale = min(1f, 1280f / max(background.width, background.height).toFloat())
         val width = (background.width * scale).toInt().coerceAtLeast(2) and -2
@@ -100,7 +106,7 @@ object RouteVideoExporter {
                 }
             }
 
-            val frameCount = max(48, min(180, points.size * 2))
+            val frameCount = durationSeconds.coerceIn(5, 30) * 24
             val targetRect = Rect(0, 0, width, height)
             val backgroundPaint = Paint(Paint.FILTER_BITMAP_FLAG)
             val outlinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -135,6 +141,7 @@ object RouteVideoExporter {
             val framePath = Path()
 
             for (frame in 0 until frameCount) {
+                while (paused) Thread.sleep(100L)
                 val lastIndex = (frame.toFloat() / (frameCount - 1) * (points.size - 1))
                     .toInt().coerceIn(1, points.lastIndex)
                 framePath.reset()
@@ -149,7 +156,7 @@ object RouteVideoExporter {
                 try {
                     canvas.drawBitmap(background, null, targetRect, backgroundPaint)
                     canvas.drawRect(0f, 0f, width.toFloat(), 52f * scale, bannerPaint)
-                    canvas.drawText("مسیر | بازپخش مسیر", 20f * scale, 36f * scale, titlePaint)
+                    canvas.drawText("Route | Route replay", 20f * scale, 36f * scale, titlePaint)
                     canvas.drawPath(framePath, outlinePaint)
                     canvas.drawPath(framePath, routePaint)
 
@@ -167,7 +174,7 @@ object RouteVideoExporter {
                     inputSurface!!.unlockCanvasAndPost(canvas)
                 }
                 drain(false)
-                Thread.sleep(42L)
+                Thread.sleep(1000L / 24L)
             }
 
             drain(true)
