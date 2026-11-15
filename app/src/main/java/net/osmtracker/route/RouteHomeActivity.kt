@@ -128,14 +128,17 @@ class RouteHomeActivity : AppCompatActivity() {
             false
         }
         // Keep map controls minimal: zoom remains available through pinch gestures.
-        val menuButton = TextView(this).apply {
-            text = "⋮"
-            textSize = 30f
-            gravity = Gravity.CENTER
-            minWidth = 0
-            minHeight = 0
-            setPadding(0, 0, 0, 0)
-            setTextColor(Color.WHITE)
+        val menuButton = object : View(this) {
+            private val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.BLACK }
+            override fun onDraw(canvas: Canvas) {
+                super.onDraw(canvas)
+                val centerX = width / 2f
+                val radius = 2.4f
+                for (index in 0..2) {
+                    canvas.drawCircle(centerX, height * (0.32f + index * 0.18f), radius, dotPaint)
+                }
+            }
+        }.apply {
             background = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
             elevation = 0f
             setOnClickListener { anchor ->
@@ -198,7 +201,7 @@ class RouteHomeActivity : AppCompatActivity() {
         }
         panel.addView(actionRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = 8 })
         startButton = Button(this).apply {
-            text = "شروع ضبط مسیر"
+            text = "شروع مسیر"
             isAllCaps = false
             textSize = 15f
             minHeight = 0
@@ -362,7 +365,7 @@ class RouteHomeActivity : AppCompatActivity() {
         }
         ContextCompat.startForegroundService(this, Intent(this, RouteRecordingService::class.java).setAction(RouteRecordingService.ACTION_START))
         recording = true
-        startButton.text = "پایان ضبط"
+        startButton.text = "پایان مسیر"
         startButton.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.rgb(190, 65, 60))
         status.text = "در حال ضبط مسیر • GPS فعال"
     }
@@ -370,7 +373,7 @@ class RouteHomeActivity : AppCompatActivity() {
     private fun stopRecording() {
         startService(Intent(this, RouteRecordingService::class.java).setAction(RouteRecordingService.ACTION_STOP))
         recording = false
-        startButton.text = "شروع ضبط مسیر"
+        startButton.text = "شروع مسیر"
         startButton.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.rgb(0, 157, 119))
         status.text = "مسیر ذخیره شد"
     }
