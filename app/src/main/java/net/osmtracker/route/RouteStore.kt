@@ -19,5 +19,13 @@ class RouteStore(context: Context): SQLiteOpenHelper(context,"route_recorder.db"
  }
  @Synchronized fun finishTrip(id: Long) { val v=ContentValues().apply { put("ended_at",System.currentTimeMillis()) }; writableDatabase.update("trips",v,"_id=?",arrayOf(id.toString())) }
  fun points(id: Long): List<RoutePoint> { val out=mutableListOf<RoutePoint>(); readableDatabase.query("points",arrayOf("lat","lon","ele","time","speed"),"trip_id=?",arrayOf(id.toString()),null,null,"_id ASC").use { c -> while(c.moveToNext()) out.add(RoutePoint(c.getDouble(0),c.getDouble(1),c.getDouble(2),c.getLong(3),c.getFloat(4))) }; return out }
+ @Synchronized fun deleteTrip(id: Long) {
+  writableDatabase.beginTransaction()
+  try {
+   writableDatabase.delete("points","trip_id=?",arrayOf(id.toString()))
+   writableDatabase.delete("trips","_id=?",arrayOf(id.toString()))
+   writableDatabase.setTransactionSuccessful()
+  } finally { writableDatabase.endTransaction() }
+ }
  fun trips(): List<RouteSummary> { val out=mutableListOf<RouteSummary>(); readableDatabase.rawQuery("SELECT t._id,t.started_at,t.ended_at,t.distance,COUNT(p._id) FROM trips t LEFT JOIN points p ON p.trip_id=t._id GROUP BY t._id ORDER BY t._id DESC",null).use { c -> while(c.moveToNext()) out.add(RouteSummary(c.getLong(0),c.getLong(1),c.getLong(2),c.getDouble(3),c.getInt(4))) }; return out }
 }
