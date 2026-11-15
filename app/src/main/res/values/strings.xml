@@ -1,9 +1,9 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <resources>
   <!--Generic strings-->
-  <string name="app_name">مسیر</string>
-  <string name="app_short_name">مسیر</string>
-  <string name="app_description">برنامه ثبت مسیر با GPS، نقشه زنده، تاریخچه سفرها و خروجی GPX و ویدئو.</string>
+  <string name="app_name">Route</string>
+  <string name="app_short_name">Route</string>
+  <string name="app_description">GPS route recorder with live map, trip history, GPX and video export.</string>
   <!--TrackLogger-->
   <string name="tracklogger">Track logger</string>
   <string name="tracklogger_waiting_gps">Waiting for GPS fix to enable buttons…</string>
