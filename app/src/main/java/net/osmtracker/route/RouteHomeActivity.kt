@@ -498,7 +498,7 @@ class RouteHomeActivity : AppCompatActivity() {
                     progressDialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener { button ->
                         val paused = !RouteVideoExporter.isPaused()
                         RouteVideoExporter.setPaused(paused)
-                        button.text = if (paused) "ادامه" else "مکث"
+                        progressDialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).text = if (paused) "ادامه" else "مکث"
                         progressDialog.setMessage(if (paused) "ساخت ویدئو متوقف شده است" else "در حال ساخت ویدئو…")
                     }
                     progressDialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_NEGATIVE).setOnClickListener {
