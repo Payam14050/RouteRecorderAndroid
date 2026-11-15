@@ -37,6 +37,8 @@ class RouteHomeActivity : AppCompatActivity() {
     private var receiverRegistered = false
     private var followLocation = true
     private var latestPoint: GeoPoint? = null
+    private var pendingExportTripId: Long = -1L
+    private val requestExportGpx = 72
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -328,14 +330,29 @@ class RouteHomeActivity : AppCompatActivity() {
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("مسیرهای ذخیره‌شده")
             .setItems(labels) { _, i ->
-                val points = store.points(trips[i].id)
-                line.points.clear()
-                line.points.addAll(points.map { GeoPoint(it.lat, it.lon) })
-                if (points.isNotEmpty()) {
-                    latestPoint = GeoPoint(points.last().lat, points.last().lon)
-                    map.controller.setCenter(latestPoint!!)
-                }
-                map.invalidate()
+                val selected = trips[i]
+                androidx.appcompat.app.AlertDialog.Builder(this)
+                    .setTitle(labels[i])
+                    .setItems(arrayOf("نمایش مسیر روی نقشه", "دریافت خروجی GPX")) { _, action ->
+                        if (action == 0) {
+                            val points = store.points(selected.id)
+                            line.points.clear()
+                            line.points.addAll(points.map { GeoPoint(it.lat, it.lon) })
+                            if (points.isNotEmpty()) {
+                                latestPoint = GeoPoint(points.last().lat, points.last().lon)
+                                map.controller.setCenter(latestPoint!!)
+                            }
+                            map.invalidate()
+                        } else {
+                            pendingExportTripId = selected.id
+                            val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                                addCategory(Intent.CATEGORY_OPENABLE)
+                                type = "application/gpx+xml"
+                                putExtra(Intent.EXTRA_TITLE, "route_" + selected.id + ".gpx")
+                            }
+                            startActivityForResult(intent, requestExportGpx)
+                        }
+                    }.setNegativeButton("بازگشت", null).show()
             }.setPositiveButton("بستن", null).show()
     }
 
@@ -357,6 +374,34 @@ class RouteHomeActivity : AppCompatActivity() {
         }
         map.onPause()
         super.onPause()
+    }
+
+    @Deprecated("Deprecated")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != requestExportGpx || resultCode != RESULT_OK || data?.data == null || pendingExportTripId < 0) return
+        try {
+            val points = store.points(pendingExportTripId)
+            val utc = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
+            val gpx = StringBuilder()
+            gpx.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
+            gpx.append("<gpx version=\"1.1\" creator=\"Route Recorder Android\" xmlns=\"http://www.topografix.com/GPX/1/1\">\n")
+            gpx.append("<trk><name>Route ").append(pendingExportTripId).append("</name><trkseg>\n")
+            for (point in points) {
+                gpx.append("<trkpt lat=\"").append(point.lat).append("\" lon=\"").append(point.lon).append("\">")
+                if (!point.ele.isNaN()) gpx.append("<ele>").append(point.ele).append("</ele>")
+                gpx.append("<time>").append(utc.format(Date(point.time))).append("</time></trkpt>\n")
+            }
+            gpx.append("</trkseg></trk></gpx>")
+            contentResolver.openOutputStream(data.data!!)?.bufferedWriter(Charsets.UTF_8).use { writer ->
+                writer?.write(gpx.toString())
+            }
+            Toast.makeText(this, "فایل GPX ذخیره شد (" + points.size + " نقطه)", Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "ذخیره GPX ناموفق بود: " + e.localizedMessage, Toast.LENGTH_LONG).show()
+        } finally {
+            pendingExportTripId = -1L
+        }
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
