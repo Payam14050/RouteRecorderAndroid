@@ -78,7 +78,7 @@ object RouteVideoExporter {
                         index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
                             if (muxerStarted) throw IllegalStateException("قالب خروجی ویدئو دوباره تغییر کرد")
                             trackIndex = muxer!!.addTrack(encoder.outputFormat)
-                            muxer.start()
+                            muxer!!.start()
                             muxerStarted = true
                         }
                         index >= 0 -> {
