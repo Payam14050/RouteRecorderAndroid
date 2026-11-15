@@ -50,7 +50,7 @@ class RouteRecordingService: Service(),LocationListener {
  }
  private fun notification(message: String): Notification {
   val open=PendingIntent.getActivity(this,0,Intent(this,RouteHomeActivity::class.java),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-  return NotificationCompat.Builder(this,CHANNEL).setSmallIcon(R.drawable.ic_stat_track).setContentTitle("Route Recorder").setContentText(message).setContentIntent(open).setOngoing(true).setCategory(NotificationCompat.CATEGORY_SERVICE).build()
+  return NotificationCompat.Builder(this,CHANNEL).setSmallIcon(R.drawable.ic_stat_track).setContentTitle("مسیر").setContentText(message).setContentIntent(open).setOngoing(true).setCategory(NotificationCompat.CATEGORY_SERVICE).build()
  }
  private fun createChannel() { if(Build.VERSION.SDK_INT>=26) (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).createNotificationChannel(NotificationChannel(CHANNEL,"ضبط مسیر",NotificationManager.IMPORTANCE_LOW)) }
  override fun onBind(intent: Intent?): IBinder?=null
