@@ -10,7 +10,7 @@ import kotlin.math.roundToInt
 class RouteRecordingService: Service(),LocationListener {
  companion object {
   const val ACTION_START="net.osmtracker.route.START"; const val ACTION_STOP="net.osmtracker.route.STOP"; const val ACTION_LOCATION="net.osmtracker.route.LOCATION"
-  const val EXTRA_LAT="lat"; const val EXTRA_LON="lon"; const val EXTRA_ALT="alt"; const val EXTRA_SPEED="speed"; const val EXTRA_DISTANCE="distance"
+  const val EXTRA_LAT="lat"; const val EXTRA_LON="lon"; const val EXTRA_ALT="alt"; const val EXTRA_HAS_ALT="has_alt"; const val EXTRA_SPEED="speed"; const val EXTRA_DISTANCE="distance"
   private const val CHANNEL="route_recording"; private const val NOTIFICATION=731
  }
  private lateinit var manager: LocationManager; private lateinit var store: RouteStore
@@ -31,9 +31,9 @@ class RouteRecordingService: Service(),LocationListener {
  }
  override fun onLocationChanged(location: Location) {
   val old=previous; if(old!=null && location.accuracy<=50f) distance+=old.distanceTo(location).toDouble(); previous=location
-  val p=RoutePoint(location.latitude,location.longitude,if(location.hasAltitude()) location.altitude else 0.0,location.time,if(location.hasSpeed()) location.speed else 0f)
+  val p=RoutePoint(location.latitude,location.longitude,if(location.hasAltitude()) location.altitude else Double.NaN,location.time,if(location.hasSpeed()) location.speed else 0f)
   if(location.accuracy<=50f && tripId>=0) store.addPoint(tripId,p,distance)
-  sendBroadcast(Intent(ACTION_LOCATION).setPackage(packageName).apply { putExtra(EXTRA_LAT,p.lat);putExtra(EXTRA_LON,p.lon);putExtra(EXTRA_ALT,p.ele);putExtra(EXTRA_SPEED,p.speed);putExtra(EXTRA_DISTANCE,distance) })
+  sendBroadcast(Intent(ACTION_LOCATION).setPackage(packageName).apply { putExtra(EXTRA_LAT,p.lat);putExtra(EXTRA_LON,p.lon);putExtra(EXTRA_ALT,if(p.ele.isNaN()) 0.0 else p.ele);putExtra(EXTRA_HAS_ALT,location.hasAltitude());putExtra(EXTRA_SPEED,p.speed);putExtra(EXTRA_DISTANCE,distance) })
   val speed=(p.speed*3.6f).roundToInt()
   (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(NOTIFICATION,notification("$speed km/h  •  "+String.format("%.2f km",distance/1000)))
  }
