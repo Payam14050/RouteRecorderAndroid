@@ -257,8 +257,7 @@ class RouteHomeActivity : AppCompatActivity() {
         try {
             val overlay = MyLocationNewOverlay(org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider(this), map)
             val blueArrow = createBlueLocationArrow()
-            overlay.setPersonIcon(blueArrow)
-            overlay.setDirectionArrow(blueArrow, Point(48, 48))
+            overlay.setDirectionArrow(blueArrow, blueArrow)
             overlay.enableMyLocation()
             map.overlays.add(overlay)
             val lm = getSystemService(LOCATION_SERVICE) as LocationManager
