@@ -20,6 +20,7 @@ import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Polyline
+import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
 import java.text.SimpleDateFormat
 import java.util.*
@@ -33,6 +34,7 @@ class RouteHomeActivity : AppCompatActivity() {
     private lateinit var altitudeValue: TextView
     private lateinit var store: RouteStore
     private lateinit var line: Polyline
+    private var endMarker: Marker? = null
     private var recording = false
     private var receiverRegistered = false
     private var followLocation = true
@@ -49,6 +51,7 @@ class RouteHomeActivity : AppCompatActivity() {
             )
             latestPoint = p
             line.addPoint(p)
+            updateEndMarker(p)
             if (followLocation) map.controller.animateTo(p)
             speedValue.text = String.format(Locale.getDefault(), "%.1f km/h", intent.getFloatExtra(RouteRecordingService.EXTRA_SPEED, 0f) * 3.6f)
             val hasAltitude = intent.getBooleanExtra(RouteRecordingService.EXTRA_HAS_ALT, false)
@@ -227,6 +230,17 @@ class RouteHomeActivity : AppCompatActivity() {
             setOnClickListener { action() }
         }
 
+    private fun updateEndMarker(point: GeoPoint) {
+        val marker = endMarker ?: Marker(map).also {
+            it.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+            it.title = "پایان مسیر"
+            map.overlays.add(it)
+            endMarker = it
+        }
+        marker.position = point
+        marker.title = "پایان مسیر"
+    }
+
     private fun makeStat(value: String, label: String): Pair<TextView, LinearLayout> {
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -339,6 +353,7 @@ class RouteHomeActivity : AppCompatActivity() {
             val points = store.points(trip.id)
             line.points.clear()
             line.points.addAll(points.map { GeoPoint(it.lat, it.lon) })
+            if (points.isNotEmpty()) updateEndMarker(GeoPoint(points.last().lat, points.last().lon))
             distanceValue.text = String.format(Locale.getDefault(), "%.2f km", trip.distance / 1000)
             if (points.isNotEmpty()) {
                 latestPoint = GeoPoint(points.last().lat, points.last().lon)
@@ -369,6 +384,7 @@ class RouteHomeActivity : AppCompatActivity() {
                             line.points.clear()
                             line.points.addAll(points.map { GeoPoint(it.lat, it.lon) })
                             if (points.isNotEmpty()) {
+                                updateEndMarker(GeoPoint(points.last().lat, points.last().lon))
                                 latestPoint = GeoPoint(points.last().lat, points.last().lon)
                                 map.controller.setCenter(latestPoint!!)
                             }
@@ -389,6 +405,8 @@ class RouteHomeActivity : AppCompatActivity() {
                                 .setPositiveButton("حذف") { _, _ ->
                                     store.deleteTrip(selected.id)
                                     line.points.clear()
+                                    endMarker?.let { map.overlays.remove(it) }
+                                    endMarker = null
                                     restoreLastRoute()
                                     map.invalidate()
                                     Toast.makeText(this, "سفر حذف شد", Toast.LENGTH_SHORT).show()
