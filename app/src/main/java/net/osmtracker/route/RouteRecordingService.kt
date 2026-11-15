@@ -4,11 +4,20 @@ import android.Manifest
 import android.app.*
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.location.*
+import android.location.Location
+import android.location.LocationManager
+import android.location.LocationListener
+import android.location.GnssStatus
 import android.os.*
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
-import com.google.android.gms.location.*
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationAvailability
+import com.google.android.gms.location.LocationResult
+import com.google.android.gms.location.LocationRequest as GmsLocationRequest
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 import net.osmtracker.R
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -88,7 +97,7 @@ class RouteRecordingService : Service() {
 
     private fun requestLocation() {
         if(!hasPermission()) { store.recordEvent(tripId,"permission_missing"); stopRecording(); return }
-        val request=LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY,1_000L)
+        val request=GmsLocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY,1_000L)
             .setMinUpdateIntervalMillis(500L).setMaxUpdateDelayMillis(0L).setWaitForAccurateLocation(true).build()
         try {
             fused.requestLocationUpdates(request,fusedCallback,callbackThread.looper).addOnFailureListener { e ->
