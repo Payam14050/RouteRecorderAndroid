@@ -8,6 +8,7 @@ import android.location.LocationManager
 import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
+import android.view.MotionEvent
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -102,6 +103,14 @@ class RouteHomeActivity : AppCompatActivity() {
             controller.setCenter(GeoPoint(50.9375, 6.9603))
         }
         mapFrame.addView(map, FrameLayout.LayoutParams(-1, -1))
+        // A deliberate map drag hands control to the user; the next GPS fix must not pull the map away.
+        map.setOnTouchListener { _, event ->
+            if (event.action == MotionEvent.ACTION_MOVE && followLocation) {
+                followLocation = false
+                PreferenceManager.getDefaultSharedPreferences(this).edit().putBoolean("route_follow_location", false).apply()
+            }
+            false
+        }
         val mapActions = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
@@ -112,6 +121,8 @@ class RouteHomeActivity : AppCompatActivity() {
                 setStroke(1, Color.rgb(205, 216, 225))
             }
         }
+        mapActions.addView(mapButton("＋") { map.controller.zoomIn() })
+        mapActions.addView(mapButton("－") { map.controller.zoomOut() })
         mapActions.addView(mapButton("◎") { recenter() })
         mapActions.addView(mapButton("⚙") { showSettings() })
         val actionParams = FrameLayout.LayoutParams(-2, -2, Gravity.END or Gravity.TOP).apply {
@@ -234,13 +245,14 @@ class RouteHomeActivity : AppCompatActivity() {
     }
 
     private fun recenter() {
-        followLocation = true
+        followLocation = PreferenceManager.getDefaultSharedPreferences(this).getBoolean("route_follow_location", true)
         if (latestPoint != null) map.controller.animateTo(latestPoint!!) else Toast.makeText(this, "در انتظار دریافت موقعیت GPS", Toast.LENGTH_SHORT).show()
     }
 
     private fun showSettings() {
         val options = arrayOf(
             if (followLocation) "دنبال‌کردن خودکار موقعیت: روشن" else "دنبال‌کردن خودکار موقعیت: خاموش",
+            "نوع نقشه: خیابانی / توپوگرافی",
             "بازگشت به موقعیت فعلی",
             "نمایش شمال در بالای نقشه"
         )
@@ -250,11 +262,18 @@ class RouteHomeActivity : AppCompatActivity() {
                 when (which) {
                     0 -> {
                         followLocation = !followLocation
+                        PreferenceManager.getDefaultSharedPreferences(this).edit().putBoolean("route_follow_location", followLocation).apply()
                         Toast.makeText(this, if (followLocation) "دنبال‌کردن موقعیت روشن شد" else "حرکت آزاد نقشه فعال شد", Toast.LENGTH_SHORT).show()
                         if (followLocation) recenter()
                     }
-                    1 -> recenter()
-                    2 -> {
+                    1 -> androidx.appcompat.app.AlertDialog.Builder(this)
+                        .setTitle("انتخاب لایه نقشه")
+                        .setItems(arrayOf("خیابانی (OpenStreetMap)", "توپوگرافی")) { _, layer ->
+                            map.setTileSource(if (layer == 0) TileSourceFactory.MAPNIK else TileSourceFactory.USGS_TOPO)
+                            map.invalidate()
+                        }.setNegativeButton("لغو", null).show()
+                    2 -> recenter()
+                    3 -> {
                         map.mapOrientation = 0f
                         Toast.makeText(this, "جهت نقشه: شمال رو به بالا", Toast.LENGTH_SHORT).show()
                     }
