@@ -30,9 +30,15 @@ class RouteRecordingService: Service(),LocationListener {
   return START_STICKY
  }
  override fun onLocationChanged(location: Location) {
-  val old=previous; if(old!=null && location.accuracy<=50f) distance+=old.distanceTo(location).toDouble(); previous=location
+  // Ignore low-confidence fixes so a GPS jump cannot corrupt the saved track or distance.
+  if (!location.hasAccuracy() || location.accuracy > 50f) return
+  val old=previous
+  if (old != null && location.time >= old.time && location.time - old.time <= 30_000L) {
+   distance += old.distanceTo(location).toDouble()
+  }
+  previous=location
   val p=RoutePoint(location.latitude,location.longitude,if(location.hasAltitude()) location.altitude else Double.NaN,location.time,if(location.hasSpeed()) location.speed else 0f)
-  if(location.accuracy<=50f && tripId>=0) store.addPoint(tripId,p,distance)
+  if(tripId>=0) store.addPoint(tripId,p,distance)
   sendBroadcast(Intent(ACTION_LOCATION).setPackage(packageName).apply { putExtra(EXTRA_LAT,p.lat);putExtra(EXTRA_LON,p.lon);putExtra(EXTRA_ALT,if(p.ele.isNaN()) 0.0 else p.ele);putExtra(EXTRA_HAS_ALT,location.hasAltitude());putExtra(EXTRA_SPEED,p.speed);putExtra(EXTRA_DISTANCE,distance) })
   val speed=(p.speed*3.6f).roundToInt()
   (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(NOTIFICATION,notification("$speed km/h  •  "+String.format("%.2f km",distance/1000)))
