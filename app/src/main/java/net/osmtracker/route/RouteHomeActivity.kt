@@ -235,8 +235,7 @@ class RouteHomeActivity : AppCompatActivity() {
 
     private fun recenter() {
         followLocation = true
-        latestPoint?.let { map.controller.animateTo(it) }
-            ?: Toast.makeText(this, "در انتظار دریافت موقعیت GPS", Toast.LENGTH_SHORT).show()
+        if (latestPoint != null) map.controller.animateTo(latestPoint!!) else Toast.makeText(this, "در انتظار دریافت موقعیت GPS", Toast.LENGTH_SHORT).show()
     }
 
     private fun showSettings() {
@@ -292,7 +291,7 @@ class RouteHomeActivity : AppCompatActivity() {
             distanceValue.text = String.format(Locale.getDefault(), "%.2f km", trip.distance / 1000)
             if (points.isNotEmpty()) {
                 latestPoint = GeoPoint(points.last().lat, points.last().lon)
-                map.controller.setCenter(latestPoint)
+                map.controller.setCenter(latestPoint!!)
             }
         }
     }
@@ -315,7 +314,7 @@ class RouteHomeActivity : AppCompatActivity() {
                 line.points.addAll(points.map { GeoPoint(it.lat, it.lon) })
                 if (points.isNotEmpty()) {
                     latestPoint = GeoPoint(points.last().lat, points.last().lon)
-                    map.controller.setCenter(latestPoint)
+                    map.controller.setCenter(latestPoint!!)
                 }
                 map.invalidate()
             }.setPositiveButton("بستن", null).show()
