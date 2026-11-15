@@ -62,6 +62,7 @@ class RouteHomeActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         store = RouteStore(this)
+        followLocation = PreferenceManager.getDefaultSharedPreferences(this).getBoolean("route_follow_location", true)
         Configuration.getInstance().load(this, PreferenceManager.getDefaultSharedPreferences(this))
         Configuration.getInstance().userAgentValue = packageName
         buildScreen()
