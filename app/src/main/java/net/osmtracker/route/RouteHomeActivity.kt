@@ -50,6 +50,7 @@ class RouteHomeActivity : AppCompatActivity() {
     private val requestExportGpx = 72
     private val requestExportVideo = 73
     private var pendingVideoExportTripId: Long = -1L
+    private var videoDurationSeconds = 10
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -97,7 +98,7 @@ class RouteHomeActivity : AppCompatActivity() {
             setBackgroundColor(Color.rgb(15, 38, 56))
         }
         header.addView(TextView(this).apply {
-            text = "مسیر"
+            text = "Route"
             textSize = 20f
             setTextColor(Color.WHITE)
             letterSpacing = .03f
@@ -271,19 +272,19 @@ class RouteHomeActivity : AppCompatActivity() {
     }
 
     private fun createBlueLocationArrow(): Bitmap {
-        val bitmap = Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888)
+        val bitmap = Bitmap.createBitmap(48, 48, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         val arrow = Path().apply {
-            moveTo(48f, 5f)
-            lineTo(88f, 88f)
-            lineTo(48f, 69f)
-            lineTo(8f, 88f)
+            moveTo(24f, 3f)
+            lineTo(44f, 44f)
+            lineTo(24f, 34f)
+            lineTo(4f, 44f)
             close()
         }
         canvas.drawPath(arrow, Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.WHITE
             style = Paint.Style.STROKE
-            strokeWidth = 9f
+            strokeWidth = 4f
             strokeJoin = Paint.Join.ROUND
         })
         canvas.drawPath(arrow, Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -304,7 +305,8 @@ class RouteHomeActivity : AppCompatActivity() {
             "انتخاب رنگ مسیر",
             if (followLocation) "دنبال‌کردن خودکار موقعیت: روشن" else "دنبال‌کردن خودکار موقعیت: خاموش",
             "نوع نقشه: خیابانی / توپوگرافی",
-            "بازگشت به موقعیت فعلی"
+            "بازگشت به موقعیت فعلی",
+            "تنظیم مدت ویدئو"
         )
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("تنظیمات")
@@ -334,6 +336,20 @@ class RouteHomeActivity : AppCompatActivity() {
                             map.invalidate()
                         }.setNegativeButton("لغو", null).show()
                     3 -> recenter()
+                    4 -> {
+                        val durations = arrayOf("۵ ثانیه", "۱۰ ثانیه", "۲۰ ثانیه", "۳۰ ثانیه")
+                        val values = intArrayOf(5, 10, 20, 30)
+                        val selected = values.indexOf(videoDurationSeconds).coerceAtLeast(0)
+                        androidx.appcompat.app.AlertDialog.Builder(this)
+                            .setTitle("مدت بازپخش ویدئو")
+                            .setSingleChoiceItems(durations, selected) { dialog, which ->
+                                videoDurationSeconds = values[which]
+                                PreferenceManager.getDefaultSharedPreferences(this).edit()
+                                    .putInt("route_video_duration", videoDurationSeconds).apply()
+                                dialog.dismiss()
+                                Toast.makeText(this, "مدت ویدئو تغییر کرد", Toast.LENGTH_SHORT).show()
+                            }.setNegativeButton("بستن", null).show()
+                    }
                 }
             }.setNegativeButton("بستن", null).show()
     }
@@ -469,9 +485,29 @@ class RouteHomeActivity : AppCompatActivity() {
                 status.text = "در حال ساخت ویدئوی مسیر…"
 
                 val capturedBackground = requireNotNull(background)
-                RouteVideoExporter.export(capturedBackground, screenPoints, output, line.outlinePaint.color) { error ->
+                val progressDialog = androidx.appcompat.app.AlertDialog.Builder(this)
+                    .setTitle("ساخت ویدئوی مسیر")
+                    .setMessage("در حال ساخت ویدئو…")
+                    .setPositiveButton("مکث", null)
+                    .setNegativeButton("بستن", null)
+                    .create()
+                progressDialog.setOnShowListener {
+                    progressDialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener { button ->
+                        val paused = !RouteVideoExporter.isPaused()
+                        RouteVideoExporter.setPaused(paused)
+                        button.text = if (paused) "ادامه" else "مکث"
+                        progressDialog.setMessage(if (paused) "ساخت ویدئو متوقف شده است" else "در حال ساخت ویدئو…")
+                    }
+                    progressDialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_NEGATIVE).setOnClickListener {
+                        RouteVideoExporter.setPaused(false)
+                        progressDialog.dismiss()
+                    }
+                }
+                progressDialog.show()
+                RouteVideoExporter.export(capturedBackground, screenPoints, output, line.outlinePaint.color, videoDurationSeconds) { error ->
                     runOnUiThread {
                         try {
+                            if (progressDialog.isShowing) progressDialog.dismiss()
                             if (error != null) {
                                 Toast.makeText(this, "ساخت ویدئو ناموفق بود: $error", Toast.LENGTH_LONG).show()
                             } else {
