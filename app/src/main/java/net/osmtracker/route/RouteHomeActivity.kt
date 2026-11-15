@@ -114,24 +114,36 @@ class RouteHomeActivity : AppCompatActivity() {
             }
             false
         }
-        val mapActions = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(5, 5, 5, 5)
-            background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(Color.WHITE)
-                cornerRadius = 18f
-                setStroke(1, Color.rgb(205, 216, 225))
+        // Keep map controls minimal: zoom remains available through pinch gestures.
+        val menuButton = Button(this).apply {
+            text = "⋮"
+            textSize = 25f
+            minWidth = 48
+            minHeight = 48
+            setPadding(0, 0, 0, 0)
+            setTextColor(Color.rgb(18, 54, 77))
+            backgroundTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
+            elevation = 8f
+            setOnClickListener { anchor ->
+                val menu = android.widget.PopupMenu(this@RouteHomeActivity, anchor)
+                menu.menu.add(0, 1, 0, "تاریخچه سفرها")
+                menu.menu.add(0, 2, 1, "تنظیمات و رنگ مسیر")
+                menu.menu.add(0, 3, 2, "بازگشت به موقعیت فعلی")
+                menu.setOnMenuItemClickListener { item ->
+                    when (item.itemId) {
+                        1 -> showHistory()
+                        2 -> showSettings()
+                        3 -> recenter()
+                    }
+                    true
+                }
+                menu.show()
             }
         }
-        mapActions.addView(mapButton("＋") { map.controller.zoomIn() })
-        mapActions.addView(mapButton("－") { map.controller.zoomOut() })
-        mapActions.addView(mapButton("◎") { recenter() })
-        mapActions.addView(mapButton("⚙") { showSettings() })
         val actionParams = FrameLayout.LayoutParams(-2, -2, Gravity.END or Gravity.TOP).apply {
-            setMargins(0, 18, 14, 0)
+            setMargins(0, 12, 12, 0)
         }
-        mapFrame.addView(mapActions, actionParams)
+        mapFrame.addView(menuButton, actionParams)
         root.addView(mapFrame, LinearLayout.LayoutParams(-1, 0, 1f))
 
         val panel = LinearLayout(this).apply {
@@ -166,29 +178,38 @@ class RouteHomeActivity : AppCompatActivity() {
         stats.addView(makeStat("GPS", "وضعیت").second, LinearLayout.LayoutParams(0, -2, 1f))
         panel.addView(stats)
 
+        val actionRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        panel.addView(actionRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = 8 })
         startButton = Button(this).apply {
             text = "شروع ضبط مسیر"
             isAllCaps = false
-            textSize = 16f
-            minHeight = 58
+            textSize = 15f
+            minHeight = 0
+            setPadding(4, 0, 4, 0)
             setTextColor(Color.WHITE)
             backgroundTintList = android.content.res.ColorStateList.valueOf(Color.rgb(0, 157, 119))
             setOnClickListener { if (recording) stopRecording() else requestAndStart() }
         }
-        panel.addView(startButton, LinearLayout.LayoutParams(-1, 58).apply { topMargin = 12 })
+        actionRow.addView(startButton, LinearLayout.LayoutParams(0, 52, 1f).apply { marginEnd = 6 })
         val historyButton = Button(this).apply {
-            text = "مسیرهای ذخیره‌شده"
+            text = "تاریخچه سفرها"
             isAllCaps = false
+            textSize = 14f
+            minHeight = 0
+            setPadding(4, 0, 4, 0)
             setTextColor(Color.rgb(230, 241, 247))
             backgroundTintList = android.content.res.ColorStateList.valueOf(Color.rgb(38, 67, 86))
             setOnClickListener { showHistory() }
         }
-        panel.addView(historyButton, LinearLayout.LayoutParams(-1, 48).apply { topMargin = 6 })
+        actionRow.addView(historyButton, LinearLayout.LayoutParams(0, 52, 1f).apply { marginStart = 6 })
         root.addView(panel)
         setContentView(root)
 
         line = Polyline().apply {
-            outlinePaint.color = Color.rgb(0, 132, 255)
+            outlinePaint.color = PreferenceManager.getDefaultSharedPreferences(this@RouteHomeActivity).getInt("route_line_color", Color.rgb(0, 132, 255))
             outlinePaint.strokeWidth = 10f
         }
         map.overlays.add(line)
@@ -255,32 +276,39 @@ class RouteHomeActivity : AppCompatActivity() {
 
     private fun showSettings() {
         val options = arrayOf(
+            "انتخاب رنگ مسیر",
             if (followLocation) "دنبال‌کردن خودکار موقعیت: روشن" else "دنبال‌کردن خودکار موقعیت: خاموش",
             "نوع نقشه: خیابانی / توپوگرافی",
-            "بازگشت به موقعیت فعلی",
-            "نمایش شمال در بالای نقشه"
+            "بازگشت به موقعیت فعلی"
         )
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("تنظیمات نقشه")
+            .setTitle("تنظیمات")
             .setItems(options) { _, which ->
                 when (which) {
                     0 -> {
+                        val colors = intArrayOf(Color.rgb(0, 132, 255), Color.rgb(0, 180, 110), Color.rgb(230, 65, 65), Color.rgb(150, 75, 220), Color.rgb(255, 145, 0), Color.BLACK)
+                        val names = arrayOf("آبی", "سبز", "قرمز", "بنفش", "نارنجی", "مشکی")
+                        androidx.appcompat.app.AlertDialog.Builder(this)
+                            .setTitle("رنگ مسیر")
+                            .setItems(names) { _, selected ->
+                                PreferenceManager.getDefaultSharedPreferences(this).edit().putInt("route_line_color", colors[selected]).apply()
+                                line.outlinePaint.color = colors[selected]
+                                map.invalidate()
+                            }.setNegativeButton("لغو", null).show()
+                    }
+                    1 -> {
                         followLocation = !followLocation
                         PreferenceManager.getDefaultSharedPreferences(this).edit().putBoolean("route_follow_location", followLocation).apply()
                         Toast.makeText(this, if (followLocation) "دنبال‌کردن موقعیت روشن شد" else "حرکت آزاد نقشه فعال شد", Toast.LENGTH_SHORT).show()
                         if (followLocation) recenter()
                     }
-                    1 -> androidx.appcompat.app.AlertDialog.Builder(this)
+                    2 -> androidx.appcompat.app.AlertDialog.Builder(this)
                         .setTitle("انتخاب لایه نقشه")
                         .setItems(arrayOf("خیابانی (OpenStreetMap)", "توپوگرافی")) { _, layer ->
                             map.setTileSource(if (layer == 0) TileSourceFactory.MAPNIK else TileSourceFactory.USGS_TOPO)
                             map.invalidate()
                         }.setNegativeButton("لغو", null).show()
-                    2 -> recenter()
-                    3 -> {
-                        map.mapOrientation = 0f
-                        Toast.makeText(this, "جهت نقشه: شمال رو به بالا", Toast.LENGTH_SHORT).show()
-                    }
+                    3 -> recenter()
                 }
             }.setNegativeButton("بستن", null).show()
     }
@@ -335,7 +363,7 @@ class RouteHomeActivity : AppCompatActivity() {
                 val selected = trips[i]
                 androidx.appcompat.app.AlertDialog.Builder(this)
                     .setTitle(labels[i])
-                    .setItems(arrayOf("نمایش مسیر روی نقشه", "دریافت خروجی GPX")) { _, action ->
+                    .setItems(arrayOf("نمایش مسیر روی نقشه", "دریافت خروجی GPX", "حذف این سفر")) { _, action ->
                         if (action == 0) {
                             val points = store.points(selected.id)
                             line.points.clear()
@@ -345,7 +373,7 @@ class RouteHomeActivity : AppCompatActivity() {
                                 map.controller.setCenter(latestPoint!!)
                             }
                             map.invalidate()
-                        } else {
+                        } else if (action == 1) {
                             pendingExportTripId = selected.id
                             val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                                 addCategory(Intent.CATEGORY_OPENABLE)
@@ -353,6 +381,18 @@ class RouteHomeActivity : AppCompatActivity() {
                                 putExtra(Intent.EXTRA_TITLE, "route_" + selected.id + ".gpx")
                             }
                             startActivityForResult(intent, requestExportGpx)
+                        } else {
+                            androidx.appcompat.app.AlertDialog.Builder(this)
+                                .setTitle("حذف سفر")
+                                .setMessage("این سفر و تمام نقاط GPS آن حذف شود؟")
+                                .setNegativeButton("انصراف", null)
+                                .setPositiveButton("حذف") { _, _ ->
+                                    store.deleteTrip(selected.id)
+                                    line.points.clear()
+                                    restoreLastRoute()
+                                    map.invalidate()
+                                    Toast.makeText(this, "سفر حذف شد", Toast.LENGTH_SHORT).show()
+                                }.show()
                         }
                     }.setNegativeButton("بازگشت", null).show()
             }.setPositiveButton("بستن", null).show()
