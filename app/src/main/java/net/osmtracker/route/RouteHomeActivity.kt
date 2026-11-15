@@ -247,7 +247,8 @@ class RouteHomeActivity : AppCompatActivity() {
     }
 
     private fun recenter() {
-        followLocation = PreferenceManager.getDefaultSharedPreferences(this).getBoolean("route_follow_location", true)
+        followLocation = true
+        PreferenceManager.getDefaultSharedPreferences(this).edit().putBoolean("route_follow_location", true).apply()
         if (latestPoint != null) map.controller.animateTo(latestPoint!!) else Toast.makeText(this, "در انتظار دریافت موقعیت GPS", Toast.LENGTH_SHORT).show()
     }
 
