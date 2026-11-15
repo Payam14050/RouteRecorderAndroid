@@ -3,7 +3,15 @@ package net.osmtracker.route
 import android.Manifest
 import android.content.*
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.Point
+import android.graphics.PointF
+import android.net.Uri
+import java.io.File
 import android.location.LocationManager
 import android.os.Build
 import android.os.Bundle
@@ -17,10 +25,10 @@ import androidx.preference.PreferenceManager
 import net.osmtracker.R
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Polyline
-import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
 import java.text.SimpleDateFormat
 import java.util.*
@@ -34,13 +42,14 @@ class RouteHomeActivity : AppCompatActivity() {
     private lateinit var altitudeValue: TextView
     private lateinit var store: RouteStore
     private lateinit var line: Polyline
-    private var endMarker: Marker? = null
     private var recording = false
     private var receiverRegistered = false
     private var followLocation = true
     private var latestPoint: GeoPoint? = null
     private var pendingExportTripId: Long = -1L
     private val requestExportGpx = 72
+    private val requestExportVideo = 73
+    private var pendingVideoExportTripId: Long = -1L
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -51,7 +60,6 @@ class RouteHomeActivity : AppCompatActivity() {
             )
             latestPoint = p
             line.addPoint(p)
-            updateEndMarker(p)
             if (followLocation) map.controller.animateTo(p)
             speedValue.text = String.format(Locale.getDefault(), "%.1f km/h", intent.getFloatExtra(RouteRecordingService.EXTRA_SPEED, 0f) * 3.6f)
             val hasAltitude = intent.getBooleanExtra(RouteRecordingService.EXTRA_HAS_ALT, false)
@@ -89,7 +97,7 @@ class RouteHomeActivity : AppCompatActivity() {
             setBackgroundColor(Color.rgb(15, 38, 56))
         }
         header.addView(TextView(this).apply {
-            text = "راه‌نگار"
+            text = "مسیر"
             textSize = 20f
             setTextColor(Color.WHITE)
             letterSpacing = .03f
@@ -118,15 +126,16 @@ class RouteHomeActivity : AppCompatActivity() {
             false
         }
         // Keep map controls minimal: zoom remains available through pinch gestures.
-        val menuButton = Button(this).apply {
+        val menuButton = TextView(this).apply {
             text = "⋮"
-            textSize = 25f
-            minWidth = 48
-            minHeight = 48
+            textSize = 30f
+            gravity = Gravity.CENTER
+            minWidth = 0
+            minHeight = 0
             setPadding(0, 0, 0, 0)
-            setTextColor(Color.rgb(18, 54, 77))
-            backgroundTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
-            elevation = 8f
+            setTextColor(Color.WHITE)
+            background = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
+            elevation = 0f
             setOnClickListener { anchor ->
                 val menu = android.widget.PopupMenu(this@RouteHomeActivity, anchor)
                 menu.menu.add(0, 1, 0, "تاریخچه سفرها")
@@ -143,8 +152,8 @@ class RouteHomeActivity : AppCompatActivity() {
                 menu.show()
             }
         }
-        val actionParams = FrameLayout.LayoutParams(-2, -2, Gravity.END or Gravity.TOP).apply {
-            setMargins(0, 12, 12, 0)
+        val actionParams = FrameLayout.LayoutParams(38, 42, Gravity.END or Gravity.TOP).apply {
+            setMargins(0, 4, 6, 0)
         }
         mapFrame.addView(menuButton, actionParams)
         root.addView(mapFrame, LinearLayout.LayoutParams(-1, 0, 1f))
@@ -218,29 +227,6 @@ class RouteHomeActivity : AppCompatActivity() {
         map.overlays.add(line)
     }
 
-    private fun mapButton(label: String, action: () -> Unit): Button =
-        Button(this).apply {
-            text = label
-            textSize = 20f
-            minWidth = 48
-            minHeight = 48
-            setPadding(0, 0, 0, 0)
-            setTextColor(Color.rgb(18, 54, 77))
-            backgroundTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
-            setOnClickListener { action() }
-        }
-
-    private fun updateEndMarker(point: GeoPoint) {
-        val marker = endMarker ?: Marker(map).also {
-            it.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-            it.title = "پایان مسیر"
-            map.overlays.add(it)
-            endMarker = it
-        }
-        marker.position = point
-        marker.title = "پایان مسیر"
-    }
-
     private fun makeStat(value: String, label: String): Pair<TextView, LinearLayout> {
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -270,6 +256,9 @@ class RouteHomeActivity : AppCompatActivity() {
     private fun enableMyLocation() {
         try {
             val overlay = MyLocationNewOverlay(org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider(this), map)
+            val blueArrow = createBlueLocationArrow()
+            overlay.setPersonIcon(blueArrow)
+            overlay.setDirectionArrow(blueArrow)
             overlay.enableMyLocation()
             map.overlays.add(overlay)
             val lm = getSystemService(LOCATION_SERVICE) as LocationManager
@@ -280,6 +269,29 @@ class RouteHomeActivity : AppCompatActivity() {
                 }
             }
         } catch (_: Exception) { }
+    }
+
+    private fun createBlueLocationArrow(): Bitmap {
+        val bitmap = Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val arrow = Path().apply {
+            moveTo(48f, 5f)
+            lineTo(88f, 88f)
+            lineTo(48f, 69f)
+            lineTo(8f, 88f)
+            close()
+        }
+        canvas.drawPath(arrow, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            style = Paint.Style.STROKE
+            strokeWidth = 9f
+            strokeJoin = Paint.Join.ROUND
+        })
+        canvas.drawPath(arrow, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.rgb(0, 122, 255)
+            style = Paint.Style.FILL
+        })
+        return bitmap
     }
 
     private fun recenter() {
@@ -353,7 +365,6 @@ class RouteHomeActivity : AppCompatActivity() {
             val points = store.points(trip.id)
             line.points.clear()
             line.points.addAll(points.map { GeoPoint(it.lat, it.lon) })
-            if (points.isNotEmpty()) updateEndMarker(GeoPoint(points.last().lat, points.last().lon))
             distanceValue.text = String.format(Locale.getDefault(), "%.2f km", trip.distance / 1000)
             if (points.isNotEmpty()) {
                 latestPoint = GeoPoint(points.last().lat, points.last().lon)
@@ -378,13 +389,12 @@ class RouteHomeActivity : AppCompatActivity() {
                 val selected = trips[i]
                 androidx.appcompat.app.AlertDialog.Builder(this)
                     .setTitle(labels[i])
-                    .setItems(arrayOf("نمایش مسیر روی نقشه", "دریافت خروجی GPX", "حذف این سفر")) { _, action ->
+                    .setItems(arrayOf("نمایش مسیر روی نقشه", "دریافت خروجی GPX", "ساخت ویدئوی مسیر (MP4)", "حذف این سفر")) { _, action ->
                         if (action == 0) {
                             val points = store.points(selected.id)
                             line.points.clear()
                             line.points.addAll(points.map { GeoPoint(it.lat, it.lon) })
                             if (points.isNotEmpty()) {
-                                updateEndMarker(GeoPoint(points.last().lat, points.last().lon))
                                 latestPoint = GeoPoint(points.last().lat, points.last().lon)
                                 map.controller.setCenter(latestPoint!!)
                             }
@@ -397,6 +407,14 @@ class RouteHomeActivity : AppCompatActivity() {
                                 putExtra(Intent.EXTRA_TITLE, "route_" + selected.id + ".gpx")
                             }
                             startActivityForResult(intent, requestExportGpx)
+                        } else if (action == 2) {
+                            pendingVideoExportTripId = selected.id
+                            val videoIntent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                                addCategory(Intent.CATEGORY_OPENABLE)
+                                type = "video/mp4"
+                                putExtra(Intent.EXTRA_TITLE, "masir_trip_${selected.id}.mp4")
+                            }
+                            startActivityForResult(videoIntent, requestExportVideo)
                         } else {
                             androidx.appcompat.app.AlertDialog.Builder(this)
                                 .setTitle("حذف سفر")
@@ -405,8 +423,6 @@ class RouteHomeActivity : AppCompatActivity() {
                                 .setPositiveButton("حذف") { _, _ ->
                                     store.deleteTrip(selected.id)
                                     line.points.clear()
-                                    endMarker?.let { map.overlays.remove(it) }
-                                    endMarker = null
                                     restoreLastRoute()
                                     map.invalidate()
                                     Toast.makeText(this, "سفر حذف شد", Toast.LENGTH_SHORT).show()
@@ -453,7 +469,7 @@ class RouteHomeActivity : AppCompatActivity() {
                 map.invalidate()
                 status.text = "در حال ساخت ویدئوی مسیر…"
 
-                val capturedBackground = background
+                val capturedBackground = requireNotNull(background)
                 RouteVideoExporter.export(capturedBackground, screenPoints, output, line.outlinePaint.color) { error ->
                     runOnUiThread {
                         try {
