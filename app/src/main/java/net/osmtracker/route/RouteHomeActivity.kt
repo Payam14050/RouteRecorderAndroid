@@ -416,6 +416,74 @@ class RouteHomeActivity : AppCompatActivity() {
             }.setPositiveButton("بستن", null).show()
     }
 
+    private fun exportTripVideo(tripId: Long, destination: Uri) {
+        val points = store.points(tripId)
+        if (points.size < 2) {
+            Toast.makeText(this, "برای ساخت ویدئو حداقل دو نقطه GPS لازم است", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        val north = points.maxOf { it.lat }
+        val south = points.minOf { it.lat }
+        val east = points.maxOf { it.lon }
+        val west = points.minOf { it.lon }
+        val latPadding = maxOf((north - south) * 0.12, 0.0005)
+        val lonPadding = maxOf((east - west) * 0.12, 0.0005)
+        val bounds = BoundingBox(north + latPadding, east + lonPadding, south - latPadding, west - lonPadding)
+
+        line.points.clear()
+        map.zoomToBoundingBox(bounds, true)
+        map.invalidate()
+        status.text = "در حال آماده‌سازی تصویر مسیر…"
+
+        map.postDelayed({
+            var background: Bitmap? = null
+            val output = File(cacheDir, "masir_trip_$tripId.mp4")
+            try {
+                if (map.width < 2 || map.height < 2) throw IllegalStateException("اندازه نقشه برای خروجی ویدئو مناسب نیست")
+                background = Bitmap.createBitmap(map.width, map.height, Bitmap.Config.ARGB_8888)
+                map.draw(Canvas(background))
+                val projection = map.projection
+                val screenPoints = points.map { point ->
+                    val pixel = projection.toPixels(GeoPoint(point.lat, point.lon), Point())
+                    PointF(pixel.x.toFloat(), pixel.y.toFloat())
+                }
+                line.points.clear()
+                line.points.addAll(points.map { GeoPoint(it.lat, it.lon) })
+                map.invalidate()
+                status.text = "در حال ساخت ویدئوی مسیر…"
+
+                val capturedBackground = background
+                RouteVideoExporter.export(capturedBackground, screenPoints, output, line.outlinePaint.color) { error ->
+                    runOnUiThread {
+                        try {
+                            if (error != null) {
+                                Toast.makeText(this, "ساخت ویدئو ناموفق بود: $error", Toast.LENGTH_LONG).show()
+                            } else {
+                                val copied = contentResolver.openOutputStream(destination)?.use { stream ->
+                                    output.inputStream().use { input -> input.copyTo(stream) }
+                                }
+                                if (copied == null) throw IllegalStateException("امکان نوشتن فایل انتخاب‌شده وجود ندارد")
+                                Toast.makeText(this, "ویدئوی مسیر با موفقیت ذخیره شد", Toast.LENGTH_LONG).show()
+                            }
+                        } catch (e: Exception) {
+                            Toast.makeText(this, "ذخیره ویدئو ناموفق بود: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                        } finally {
+                            capturedBackground.recycle()
+                            output.delete()
+                            status.text = "مسیر آمادهٔ مرور است"
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                background?.recycle()
+                output.delete()
+                status.text = "آمادهٔ ضبط مسیر"
+                Toast.makeText(this, "آماده‌سازی ویدئو ناموفق بود: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+            }
+        }, 1400L)
+    }
+
     override fun onResume() {
         super.onResume()
         map.onResume()
@@ -439,6 +507,12 @@ class RouteHomeActivity : AppCompatActivity() {
     @Deprecated("Deprecated")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == requestExportVideo && resultCode == RESULT_OK && data?.data != null && pendingVideoExportTripId >= 0) {
+            val tripId = pendingVideoExportTripId
+            pendingVideoExportTripId = -1L
+            exportTripVideo(tripId, data.data!!)
+            return
+        }
         if (requestCode != requestExportGpx || resultCode != RESULT_OK || data?.data == null || pendingExportTripId < 0) return
         try {
             val points = store.points(pendingExportTripId)
