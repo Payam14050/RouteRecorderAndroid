@@ -492,6 +492,8 @@ class RouteHomeActivity : AppCompatActivity() {
                     .setPositiveButton("مکث", null)
                     .setNegativeButton("ادامه در پس‌زمینه", null)
                     .create()
+                progressDialog.setCancelable(false)
+                progressDialog.setCanceledOnTouchOutside(false)
                 progressDialog.setOnShowListener {
                     progressDialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener { button ->
                         val paused = !RouteVideoExporter.isPaused()
