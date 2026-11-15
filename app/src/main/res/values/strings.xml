@@ -1,9 +1,9 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <resources>
   <!--Generic strings-->
-  <string name="app_name">Route Recorder</string>
-  <string name="app_short_name">Route Recorder</string>
-  <string name="app_description">GPS route recorder with live map, trip history and GPX export.</string>
+  <string name="app_name">Route</string>
+  <string name="app_short_name">Route</string>
+  <string name="app_description">GPS route recorder with live map, trip history, GPX and video export.</string>
   <!--TrackLogger-->
   <string name="tracklogger">Track logger</string>
   <string name="tracklogger_waiting_gps">Waiting for GPS fix to enable buttons…</string>

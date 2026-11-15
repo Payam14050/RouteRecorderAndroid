@@ -3,12 +3,21 @@ package net.osmtracker.route
 import android.Manifest
 import android.content.*
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.Point
+import android.graphics.PointF
+import android.net.Uri
+import java.io.File
 import android.location.LocationManager
 import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
 import android.view.MotionEvent
+import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -17,6 +26,7 @@ import androidx.preference.PreferenceManager
 import net.osmtracker.R
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Polyline
@@ -39,6 +49,9 @@ class RouteHomeActivity : AppCompatActivity() {
     private var latestPoint: GeoPoint? = null
     private var pendingExportTripId: Long = -1L
     private val requestExportGpx = 72
+    private val requestExportVideo = 73
+    private var pendingVideoExportTripId: Long = -1L
+    private var videoDurationSeconds = 10
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -62,6 +75,7 @@ class RouteHomeActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         store = RouteStore(this)
+        videoDurationSeconds = PreferenceManager.getDefaultSharedPreferences(this).getInt("route_video_duration", 10)
         followLocation = PreferenceManager.getDefaultSharedPreferences(this).getBoolean("route_follow_location", true)
         Configuration.getInstance().load(this, PreferenceManager.getDefaultSharedPreferences(this))
         Configuration.getInstance().userAgentValue = packageName
@@ -86,7 +100,7 @@ class RouteHomeActivity : AppCompatActivity() {
             setBackgroundColor(Color.rgb(15, 38, 56))
         }
         header.addView(TextView(this).apply {
-            text = "راه‌نگار"
+            text = "Route"
             textSize = 20f
             setTextColor(Color.WHITE)
             letterSpacing = .03f
@@ -114,24 +128,40 @@ class RouteHomeActivity : AppCompatActivity() {
             }
             false
         }
-        val mapActions = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(5, 5, 5, 5)
-            background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(Color.WHITE)
-                cornerRadius = 18f
-                setStroke(1, Color.rgb(205, 216, 225))
+        // Keep map controls minimal: zoom remains available through pinch gestures.
+        val menuButton = object : View(this) {
+            private val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.BLACK }
+            override fun onDraw(canvas: Canvas) {
+                super.onDraw(canvas)
+                val centerX = width / 2f
+                val radius = 2.4f
+                for (index in 0..2) {
+                    canvas.drawCircle(centerX, height * (0.32f + index * 0.18f), radius, dotPaint)
+                }
+            }
+        }.apply {
+            background = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
+            elevation = 0f
+            setOnClickListener { anchor ->
+                val menu = android.widget.PopupMenu(this@RouteHomeActivity, anchor)
+                menu.menu.add(0, 1, 0, "تاریخچه سفرها")
+                menu.menu.add(0, 2, 1, "تنظیمات و رنگ مسیر")
+                menu.menu.add(0, 3, 2, "بازگشت به موقعیت فعلی")
+                menu.setOnMenuItemClickListener { item ->
+                    when (item.itemId) {
+                        1 -> showHistory()
+                        2 -> showSettings()
+                        3 -> recenter()
+                    }
+                    true
+                }
+                menu.show()
             }
         }
-        mapActions.addView(mapButton("＋") { map.controller.zoomIn() })
-        mapActions.addView(mapButton("－") { map.controller.zoomOut() })
-        mapActions.addView(mapButton("◎") { recenter() })
-        mapActions.addView(mapButton("⚙") { showSettings() })
-        val actionParams = FrameLayout.LayoutParams(-2, -2, Gravity.END or Gravity.TOP).apply {
-            setMargins(0, 18, 14, 0)
+        val actionParams = FrameLayout.LayoutParams(38, 42, Gravity.END or Gravity.TOP).apply {
+            setMargins(0, 4, 6, 0)
         }
-        mapFrame.addView(mapActions, actionParams)
+        mapFrame.addView(menuButton, actionParams)
         root.addView(mapFrame, LinearLayout.LayoutParams(-1, 0, 1f))
 
         val panel = LinearLayout(this).apply {
@@ -166,45 +196,42 @@ class RouteHomeActivity : AppCompatActivity() {
         stats.addView(makeStat("GPS", "وضعیت").second, LinearLayout.LayoutParams(0, -2, 1f))
         panel.addView(stats)
 
+        val actionRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        panel.addView(actionRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = 8 })
         startButton = Button(this).apply {
-            text = "شروع ضبط مسیر"
+            text = "شروع مسیر"
             isAllCaps = false
-            textSize = 16f
-            minHeight = 58
+            textSize = 15f
+            minHeight = 0
+            setPadding(4, 0, 4, 0)
             setTextColor(Color.WHITE)
             backgroundTintList = android.content.res.ColorStateList.valueOf(Color.rgb(0, 157, 119))
             setOnClickListener { if (recording) stopRecording() else requestAndStart() }
         }
-        panel.addView(startButton, LinearLayout.LayoutParams(-1, 58).apply { topMargin = 12 })
+        actionRow.addView(startButton, LinearLayout.LayoutParams(0, 52, 1f).apply { marginEnd = 6 })
         val historyButton = Button(this).apply {
-            text = "مسیرهای ذخیره‌شده"
+            text = "تاریخچه سفرها"
             isAllCaps = false
+            textSize = 14f
+            minHeight = 0
+            setPadding(4, 0, 4, 0)
             setTextColor(Color.rgb(230, 241, 247))
             backgroundTintList = android.content.res.ColorStateList.valueOf(Color.rgb(38, 67, 86))
             setOnClickListener { showHistory() }
         }
-        panel.addView(historyButton, LinearLayout.LayoutParams(-1, 48).apply { topMargin = 6 })
+        actionRow.addView(historyButton, LinearLayout.LayoutParams(0, 52, 1f).apply { marginStart = 6 })
         root.addView(panel)
         setContentView(root)
 
         line = Polyline().apply {
-            outlinePaint.color = Color.rgb(0, 132, 255)
+            outlinePaint.color = PreferenceManager.getDefaultSharedPreferences(this@RouteHomeActivity).getInt("route_line_color", Color.rgb(0, 132, 255))
             outlinePaint.strokeWidth = 10f
         }
         map.overlays.add(line)
     }
-
-    private fun mapButton(label: String, action: () -> Unit): Button =
-        Button(this).apply {
-            text = label
-            textSize = 20f
-            minWidth = 48
-            minHeight = 48
-            setPadding(0, 0, 0, 0)
-            setTextColor(Color.rgb(18, 54, 77))
-            backgroundTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
-            setOnClickListener { action() }
-        }
 
     private fun makeStat(value: String, label: String): Pair<TextView, LinearLayout> {
         val box = LinearLayout(this).apply {
@@ -235,6 +262,8 @@ class RouteHomeActivity : AppCompatActivity() {
     private fun enableMyLocation() {
         try {
             val overlay = MyLocationNewOverlay(org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider(this), map)
+            val blueArrow = createBlueLocationArrow()
+            overlay.setDirectionArrow(blueArrow, blueArrow)
             overlay.enableMyLocation()
             map.overlays.add(overlay)
             val lm = getSystemService(LOCATION_SERVICE) as LocationManager
@@ -247,6 +276,29 @@ class RouteHomeActivity : AppCompatActivity() {
         } catch (_: Exception) { }
     }
 
+    private fun createBlueLocationArrow(): Bitmap {
+        val bitmap = Bitmap.createBitmap(48, 48, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val arrow = Path().apply {
+            moveTo(24f, 3f)
+            lineTo(44f, 44f)
+            lineTo(24f, 34f)
+            lineTo(4f, 44f)
+            close()
+        }
+        canvas.drawPath(arrow, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            style = Paint.Style.STROKE
+            strokeWidth = 4f
+            strokeJoin = Paint.Join.ROUND
+        })
+        canvas.drawPath(arrow, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.rgb(0, 122, 255)
+            style = Paint.Style.FILL
+        })
+        return bitmap
+    }
+
     private fun recenter() {
         followLocation = true
         PreferenceManager.getDefaultSharedPreferences(this).edit().putBoolean("route_follow_location", true).apply()
@@ -255,31 +307,53 @@ class RouteHomeActivity : AppCompatActivity() {
 
     private fun showSettings() {
         val options = arrayOf(
+            "انتخاب رنگ مسیر",
             if (followLocation) "دنبال‌کردن خودکار موقعیت: روشن" else "دنبال‌کردن خودکار موقعیت: خاموش",
             "نوع نقشه: خیابانی / توپوگرافی",
             "بازگشت به موقعیت فعلی",
-            "نمایش شمال در بالای نقشه"
+            "تنظیم مدت ویدئو"
         )
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("تنظیمات نقشه")
+            .setTitle("تنظیمات")
             .setItems(options) { _, which ->
                 when (which) {
                     0 -> {
+                        val colors = intArrayOf(Color.rgb(0, 132, 255), Color.rgb(0, 180, 110), Color.rgb(230, 65, 65), Color.rgb(150, 75, 220), Color.rgb(255, 145, 0), Color.BLACK)
+                        val names = arrayOf("آبی", "سبز", "قرمز", "بنفش", "نارنجی", "مشکی")
+                        androidx.appcompat.app.AlertDialog.Builder(this)
+                            .setTitle("رنگ مسیر")
+                            .setItems(names) { _, selected ->
+                                PreferenceManager.getDefaultSharedPreferences(this).edit().putInt("route_line_color", colors[selected]).apply()
+                                line.outlinePaint.color = colors[selected]
+                                map.invalidate()
+                            }.setNegativeButton("لغو", null).show()
+                    }
+                    1 -> {
                         followLocation = !followLocation
                         PreferenceManager.getDefaultSharedPreferences(this).edit().putBoolean("route_follow_location", followLocation).apply()
                         Toast.makeText(this, if (followLocation) "دنبال‌کردن موقعیت روشن شد" else "حرکت آزاد نقشه فعال شد", Toast.LENGTH_SHORT).show()
                         if (followLocation) recenter()
                     }
-                    1 -> androidx.appcompat.app.AlertDialog.Builder(this)
+                    2 -> androidx.appcompat.app.AlertDialog.Builder(this)
                         .setTitle("انتخاب لایه نقشه")
                         .setItems(arrayOf("خیابانی (OpenStreetMap)", "توپوگرافی")) { _, layer ->
                             map.setTileSource(if (layer == 0) TileSourceFactory.MAPNIK else TileSourceFactory.USGS_TOPO)
                             map.invalidate()
                         }.setNegativeButton("لغو", null).show()
-                    2 -> recenter()
-                    3 -> {
-                        map.mapOrientation = 0f
-                        Toast.makeText(this, "جهت نقشه: شمال رو به بالا", Toast.LENGTH_SHORT).show()
+                    3 -> recenter()
+                    4 -> {
+                        val durations = arrayOf("۵ ثانیه", "۱۰ ثانیه", "۲۰ ثانیه", "۳۰ ثانیه")
+                        val values = intArrayOf(5, 10, 20, 30)
+                        val selected = values.indexOf(videoDurationSeconds).coerceAtLeast(0)
+                        androidx.appcompat.app.AlertDialog.Builder(this)
+                            .setTitle("مدت بازپخش ویدئو")
+                            .setSingleChoiceItems(durations, selected) { dialog, which ->
+                                videoDurationSeconds = values[which]
+                                PreferenceManager.getDefaultSharedPreferences(this).edit()
+                                    .putInt("route_video_duration", videoDurationSeconds).apply()
+                                dialog.dismiss()
+                                Toast.makeText(this, "مدت ویدئو تغییر کرد", Toast.LENGTH_SHORT).show()
+                            }.setNegativeButton("بستن", null).show()
                     }
                 }
             }.setNegativeButton("بستن", null).show()
@@ -292,7 +366,7 @@ class RouteHomeActivity : AppCompatActivity() {
         }
         ContextCompat.startForegroundService(this, Intent(this, RouteRecordingService::class.java).setAction(RouteRecordingService.ACTION_START))
         recording = true
-        startButton.text = "پایان ضبط"
+        startButton.text = "پایان مسیر"
         startButton.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.rgb(190, 65, 60))
         status.text = "در حال ضبط مسیر • GPS فعال"
     }
@@ -300,7 +374,7 @@ class RouteHomeActivity : AppCompatActivity() {
     private fun stopRecording() {
         startService(Intent(this, RouteRecordingService::class.java).setAction(RouteRecordingService.ACTION_STOP))
         recording = false
-        startButton.text = "شروع ضبط مسیر"
+        startButton.text = "شروع مسیر"
         startButton.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.rgb(0, 157, 119))
         status.text = "مسیر ذخیره شد"
     }
@@ -335,7 +409,7 @@ class RouteHomeActivity : AppCompatActivity() {
                 val selected = trips[i]
                 androidx.appcompat.app.AlertDialog.Builder(this)
                     .setTitle(labels[i])
-                    .setItems(arrayOf("نمایش مسیر روی نقشه", "دریافت خروجی GPX")) { _, action ->
+                    .setItems(arrayOf("نمایش مسیر روی نقشه", "دریافت خروجی GPX", "ساخت ویدئوی مسیر (MP4)", "حذف این سفر")) { _, action ->
                         if (action == 0) {
                             val points = store.points(selected.id)
                             line.points.clear()
@@ -345,7 +419,7 @@ class RouteHomeActivity : AppCompatActivity() {
                                 map.controller.setCenter(latestPoint!!)
                             }
                             map.invalidate()
-                        } else {
+                        } else if (action == 1) {
                             pendingExportTripId = selected.id
                             val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                                 addCategory(Intent.CATEGORY_OPENABLE)
@@ -353,9 +427,119 @@ class RouteHomeActivity : AppCompatActivity() {
                                 putExtra(Intent.EXTRA_TITLE, "route_" + selected.id + ".gpx")
                             }
                             startActivityForResult(intent, requestExportGpx)
+                        } else if (action == 2) {
+                            pendingVideoExportTripId = selected.id
+                            val videoIntent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                                addCategory(Intent.CATEGORY_OPENABLE)
+                                type = "video/mp4"
+                                putExtra(Intent.EXTRA_TITLE, "masir_trip_${selected.id}.mp4")
+                            }
+                            startActivityForResult(videoIntent, requestExportVideo)
+                        } else {
+                            androidx.appcompat.app.AlertDialog.Builder(this)
+                                .setTitle("حذف سفر")
+                                .setMessage("این سفر و تمام نقاط GPS آن حذف شود؟")
+                                .setNegativeButton("انصراف", null)
+                                .setPositiveButton("حذف") { _, _ ->
+                                    store.deleteTrip(selected.id)
+                                    line.points.clear()
+                                    restoreLastRoute()
+                                    map.invalidate()
+                                    Toast.makeText(this, "سفر حذف شد", Toast.LENGTH_SHORT).show()
+                                }.show()
                         }
                     }.setNegativeButton("بازگشت", null).show()
             }.setPositiveButton("بستن", null).show()
+    }
+
+    private fun exportTripVideo(tripId: Long, destination: Uri) {
+        val points = store.points(tripId)
+        if (points.size < 2) {
+            Toast.makeText(this, "برای ساخت ویدئو حداقل دو نقطه GPS لازم است", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        val north = points.maxOf { it.lat }
+        val south = points.minOf { it.lat }
+        val east = points.maxOf { it.lon }
+        val west = points.minOf { it.lon }
+        val latPadding = maxOf((north - south) * 0.12, 0.0005)
+        val lonPadding = maxOf((east - west) * 0.12, 0.0005)
+        val bounds = BoundingBox(north + latPadding, east + lonPadding, south - latPadding, west - lonPadding)
+
+        line.points.clear()
+        map.zoomToBoundingBox(bounds, true)
+        map.invalidate()
+        status.text = "در حال آماده‌سازی تصویر مسیر…"
+
+        map.postDelayed({
+            var background: Bitmap? = null
+            val output = File(cacheDir, "masir_trip_$tripId.mp4")
+            try {
+                if (map.width < 2 || map.height < 2) throw IllegalStateException("اندازه نقشه برای خروجی ویدئو مناسب نیست")
+                background = Bitmap.createBitmap(map.width, map.height, Bitmap.Config.ARGB_8888)
+                map.draw(Canvas(background))
+                val projection = map.projection
+                val screenPoints = points.map { point ->
+                    val pixel = projection.toPixels(GeoPoint(point.lat, point.lon), Point())
+                    PointF(pixel.x.toFloat(), pixel.y.toFloat())
+                }
+                line.points.clear()
+                line.points.addAll(points.map { GeoPoint(it.lat, it.lon) })
+                map.invalidate()
+                status.text = "در حال ساخت ویدئوی مسیر…"
+
+                val capturedBackground = requireNotNull(background)
+                val progressDialog = androidx.appcompat.app.AlertDialog.Builder(this)
+                    .setTitle("ساخت ویدئوی مسیر")
+                    .setMessage("در حال ساخت ویدئو…")
+                    .setPositiveButton("مکث", null)
+                    .setNegativeButton("ادامه در پس‌زمینه", null)
+                    .create()
+                progressDialog.setCancelable(false)
+                progressDialog.setCanceledOnTouchOutside(false)
+                progressDialog.setOnShowListener {
+                    progressDialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener { button ->
+                        val paused = !RouteVideoExporter.isPaused()
+                        RouteVideoExporter.setPaused(paused)
+                        progressDialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).text = if (paused) "ادامه" else "مکث"
+                        progressDialog.setMessage(if (paused) "ساخت ویدئو متوقف شده است" else "در حال ساخت ویدئو…")
+                    }
+                    progressDialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_NEGATIVE).setOnClickListener {
+                        RouteVideoExporter.setPaused(false)
+                        progressDialog.dismiss()
+                    }
+                }
+                progressDialog.show()
+                RouteVideoExporter.export(capturedBackground, screenPoints, output, line.outlinePaint.color, videoDurationSeconds) { error ->
+                    runOnUiThread {
+                        try {
+                            if (progressDialog.isShowing) progressDialog.dismiss()
+                            if (error != null) {
+                                Toast.makeText(this, "ساخت ویدئو ناموفق بود: $error", Toast.LENGTH_LONG).show()
+                            } else {
+                                val copied = contentResolver.openOutputStream(destination)?.use { stream ->
+                                    output.inputStream().use { input -> input.copyTo(stream) }
+                                }
+                                if (copied == null) throw IllegalStateException("امکان نوشتن فایل انتخاب‌شده وجود ندارد")
+                                Toast.makeText(this, "ویدئوی مسیر با موفقیت ذخیره شد", Toast.LENGTH_LONG).show()
+                            }
+                        } catch (e: Exception) {
+                            Toast.makeText(this, "ذخیره ویدئو ناموفق بود: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                        } finally {
+                            capturedBackground.recycle()
+                            output.delete()
+                            status.text = "مسیر آمادهٔ مرور است"
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                background?.recycle()
+                output.delete()
+                status.text = "آمادهٔ ضبط مسیر"
+                Toast.makeText(this, "آماده‌سازی ویدئو ناموفق بود: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+            }
+        }, 1400L)
     }
 
     override fun onResume() {
@@ -381,6 +565,12 @@ class RouteHomeActivity : AppCompatActivity() {
     @Deprecated("Deprecated")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == requestExportVideo && resultCode == RESULT_OK && data?.data != null && pendingVideoExportTripId >= 0) {
+            val tripId = pendingVideoExportTripId
+            pendingVideoExportTripId = -1L
+            exportTripVideo(tripId, data.data!!)
+            return
+        }
         if (requestCode != requestExportGpx || resultCode != RESULT_OK || data?.data == null || pendingExportTripId < 0) return
         try {
             val points = store.points(pendingExportTripId)
