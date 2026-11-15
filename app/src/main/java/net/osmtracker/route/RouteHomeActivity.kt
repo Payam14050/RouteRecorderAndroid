@@ -74,6 +74,7 @@ class RouteHomeActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         store = RouteStore(this)
+        videoDurationSeconds = PreferenceManager.getDefaultSharedPreferences(this).getInt("route_video_duration", 10)
         followLocation = PreferenceManager.getDefaultSharedPreferences(this).getBoolean("route_follow_location", true)
         Configuration.getInstance().load(this, PreferenceManager.getDefaultSharedPreferences(this))
         Configuration.getInstance().userAgentValue = packageName
@@ -489,7 +490,7 @@ class RouteHomeActivity : AppCompatActivity() {
                     .setTitle("ساخت ویدئوی مسیر")
                     .setMessage("در حال ساخت ویدئو…")
                     .setPositiveButton("مکث", null)
-                    .setNegativeButton("بستن", null)
+                    .setNegativeButton("ادامه در پس‌زمینه", null)
                     .create()
                 progressDialog.setOnShowListener {
                     progressDialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener { button ->
